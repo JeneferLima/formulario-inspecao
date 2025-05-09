@@ -12,13 +12,17 @@ import base64
 st.set_page_config(page_title="Formulário de Inspeção", layout="centered")
 st.title("📋 Formulário de Inspeção")
 
+# Inicializa session state
+if "form_enviado" not in st.session_state:
+    st.session_state["form_enviado"] = False
+
 # 1 - Data
 data_inicio = st.date_input("1️⃣ Insira a data de início da inspeção", date.today())
 
 # 2 - Nome
 nome = st.text_input("2️⃣ Insira seu nome")
 
-# 3 - Localização automática via navegador (corrigida)
+# 3 - Localização automática via navegador
 st.markdown("### 3️⃣ Local da inspeção")
 coord_val = streamlit_js_eval(
     js_expressions="""
@@ -42,15 +46,23 @@ condicao = st.radio("Selecione uma opção:", ["Sim", "Não"])
 
 # 5 - Motivo e foto (se necessário)
 foto = None
+motivo = ""
 if condicao == "Não":
     foto = st.file_uploader("📸 Tire ou envie uma foto do local", type=["png", "jpg", "jpeg"])
     motivo = st.text_area("📝 Descreva o motivo")
-else:
-    motivo = ""
 
 # 6 - Enviar formulário
 if st.button("✅ Enviar formulário"):
-    st.success("Formulário enviado com sucesso!")
+    if not nome:
+        st.error("❗ Por favor, preencha o nome.")
+    elif condicao == "Não" and not foto:
+        st.error("❗ Foto obrigatória quando a condição for 'Não'.")
+    else:
+        st.session_state["form_enviado"] = True
+
+# Execução após validação
+if st.session_state["form_enviado"]:
+    st.success("✅ Formulário enviado com sucesso!")
     st.write("### Resumo da Inspeção:")
     st.write(f"**Data:** {data_inicio}")
     st.write(f"**Nome:** {nome}")
@@ -74,8 +86,8 @@ if st.button("✅ Enviar formulário"):
         df.to_csv("respostas.csv", mode='a', header=False, index=False)
 
     # Criar PDF
-    pdf_path = f"relatorios/Relatorio_{nome}_{data_inicio}.pdf".replace(" ", "_")
     os.makedirs("relatorios", exist_ok=True)
+    pdf_path = f"relatorios/Relatorio_{nome}_{data_inicio}.pdf".replace(" ", "_")
     c = canvas.Canvas(pdf_path, pagesize=A4)
     largura, altura = A4
 
@@ -94,8 +106,8 @@ if st.button("✅ Enviar formulário"):
         try:
             img = ImageReader(io.BytesIO(foto.getvalue()))
             c.drawImage(img, 50, altura - 450, width=200, preserveAspectRatio=True, mask='auto')
-        except:
-            c.drawString(50, altura - 200, "Erro ao adicionar imagem.")
+        except Exception as e:
+            c.drawString(50, altura - 200, f"Erro ao adicionar imagem: {str(e)}")
 
     c.showPage()
     c.save()
@@ -106,6 +118,9 @@ if st.button("✅ Enviar formulário"):
         b64_pdf = base64.b64encode(pdf_bytes).decode()
         href = f'<a href="data:application/pdf;base64,{b64_pdf}" download="{os.path.basename(pdf_path)}" target="_blank">📄 Baixar relatório em PDF</a>'
         st.markdown(href, unsafe_allow_html=True)
+
+    # Reset
+    st.session_state["form_enviado"] = False
 
 # 7 - Acesso ao relatório completo com senha
 st.markdown("---")
@@ -124,5 +139,6 @@ if senha == "inspecao2024":
         st.warning("Nenhum dado disponível para download.")
 elif senha:
     st.error("Senha incorreta.")
+
 
 
